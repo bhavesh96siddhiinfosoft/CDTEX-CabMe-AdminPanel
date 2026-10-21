@@ -34,7 +34,7 @@ class SettingsController extends Controller
         // column before, so editing either moved both — and branding could not
         // write it at all, which is why "Customer App Color" saved nothing.
         'branding'      => ['title', 'footer', 'website_color', 'driverapp_color', 'adminpanel_color', 'adminpanel_sec_color', 'app_logo', 'app_logo_small', 'app_logo_favicon'],
-        'web'           => ['web_panel_color', 'web_panel_url', 'web_footer_description', 'web_map_iframe', 'web_header_logo', 'web_footer_logo', 'web_favicon', 'web_social', 'web_cookie_consent'],
+        'web'           => ['web_panel_color', 'web_panel_url', 'web_app_store_link', 'web_play_store_link', 'web_footer_description', 'web_map_iframe', 'web_header_logo', 'web_footer_logo', 'web_favicon', 'web_social', 'web_cookie_consent'],
         'ride'          => ['driver_radios', 'trip_accept_reject_by_driver', 'driver_order_assignment', 'show_ride_otp', 'delivery_distance'],
         'surge'         => ['surge_zone_radius', 'surge_zone_ride_count', 'surge_zone_selection_minutes', 'surge_zone_duration_minutes', 'surge_zone_surge_percentage'],
         'wallet'        => ['minimum_deposit_amount', 'minimum_withdrawal_amount'],
@@ -62,6 +62,8 @@ class SettingsController extends Controller
         'map_for_app' => 'required',
         'active_services' => 'required|array|min:1',
         'web_panel_url' => 'nullable|url',
+        'web_app_store_link' => 'nullable|url',
+        'web_play_store_link' => 'nullable|url',
         'web_header_logo' => 'nullable|image',
         'web_footer_logo' => 'nullable|image',
         'web_favicon' => 'nullable|image',
@@ -146,6 +148,8 @@ class SettingsController extends Controller
             'app_version' => 'app_version',
             'web_version' => 'web_version',
             'web_panel_url' => 'web_panel_url',
+            'web_app_store_link' => 'web_app_store_link',
+            'web_play_store_link' => 'web_play_store_link',
             'web_footer_description' => 'web_footer_description',
             'web_map_iframe' => 'web_map_iframe',
         ];

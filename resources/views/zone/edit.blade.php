@@ -140,7 +140,7 @@
                                 
                             </div>
                             
-                            <input type="hidden" id="coordinates" name="coordinates" value="">
+                            <input type="hidden" id="coordinates" name="coordinates" value="{{ $coordinates }}">
                             <input type="hidden" id="area" name="area" value="">
                         </form>
                     </div>
@@ -237,58 +237,52 @@
         var kernelColor = "#000";
         var default_lat = '{{$default_lat}}';
         var default_lng = '{{$default_lng}}';
-        var geopoints = '';
-        var data = '{{$coordinates}}';
+        var geopoints = [];
+        var zones_area = [];
+        var latLonArray = [];
+        var data = '{!! $coordinates !!}';
         let mapType = "{{ $mapType }}"; 
         let googleMapKey = "{{ $googleMapKey }}"; 
         let drawnItems = new L.FeatureGroup();
-        let deleteButton ,dragMap;
+        let deleteButton, dragMap;
         let selectedPolygon = null;
-        let zones = JSON.parse(data.replace(/&quot;/g,'"'));
-        var onclick='',polygon='',deletearea='';
-      
+        var onclick='', polygon='', deletearea='';
+
+        try {
+            var rawData = typeof data === 'string' ? JSON.parse(data.replace(/&quot;/g, '"')) : data;
+            var pointList = (Array.isArray(rawData) && Array.isArray(rawData[0])) ? rawData[0] : (Array.isArray(rawData) ? rawData : []);
+            pointList.forEach(function (pt) {
+                if (pt && pt.lat !== undefined) {
+                    var lat = parseFloat(pt.lat);
+                    var lng = parseFloat(pt.lng !== undefined ? pt.lng : pt.lon);
+                    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                        geopoints.push({ lat: lat, lng: lng });
+                        zones_area.push({ lat: lat, lng: lng });
+                        latLonArray.push([lat, lng]);
+                    }
+                }
+            });
+        } catch (e) {
+            console.error("Invalid zone coordinates:", e);
+        }
+
+        if (geopoints.length > 0) {
+            default_lat = geopoints[0].lat;
+            default_lng = geopoints[0].lng;
+        }
+
         document.addEventListener("mapsLoaded", function () {
             initMap();
-        });          
-       
-        $(document).ready(function () {          
-            if (Array.isArray(zones) && zones.length > 0) {
-                if (Array.isArray(zones[0])) {
-                    const latLonArray = [];
-                    zones[0].forEach(function (zone) {
-                        if (zone.lat !== undefined && zone.lng !== undefined) {
-                            latLonArray.push([zone.lat, zone.lng]); // Add [lat, lon] pair to the array
-                        } else {
-                            console.error("Invalid zone data: Missing lat/lng in zone object", zone);
-                        }
-                    });
-                    document.getElementById('area').value = latLonArray.map(coord => `${coord[1]},${coord[0]}`).join(',');
-                    if(mapType == "OSM"){                        
-                        var coordinatesUpdated = latLonArray.map(function(coord) {
-                            return {
-                                lat: coord[0],  // latitude from the first element of the array
-                                lon: coord[1]   // longitude from the second element of the array
-                            };
-                        });
-                        document.getElementById('coordinates').value =JSON.stringify(coordinatesUpdated);
-                    }
-                    else
-                    {
-                        latLonArray.push(latLonArray[0]);
-                        document.getElementById('coordinates').value =latLonArray;
-                    }
-                    default_lat = zones[0][0].lat || 0; // Fallback to 0 if not valid
-                    default_lng = zones[0][0].lng || 0; // Fallback to 0 if not valid
-                    geopoints = zones[0];
-                    setTimeout(function(){
-                        initMap();
-                    },2500);
-                } else {
-                    console.error("Invalid zone data: Missing lat/lng in zone objects");
+        });
+
+        $(document).ready(function () {
+            var coordsInput = document.getElementById('coordinates');
+            if (coordsInput && (!coordsInput.value || coordsInput.value === '""')) {
+                if (geopoints.length > 0) {
+                    coordsInput.value = JSON.stringify(geopoints);
                 }
-            } else {
-                console.error("Invalid zones object, missing latitude, longitude, or area");
             }
+            initMap();
         });
         function addNewPolys(newPoly) {
             google.maps.event.addListener(newPoly, 'click', function() {
@@ -392,41 +386,42 @@
         }
         function makePolygonDraggable(layer) {
             updateCoordinatesInput(layer);
-            // To track mouse position and delta
             var isDragging = false;
             var startLatLng = null;
             var startLatLngs = [];
-            // Mouse down event to start dragging
+
             layer.on('mousedown', function(e) {
                 isDragging = true;
-                startLatLng = e.latlng; // Store the initial mouse position in LatLng
-                startLatLngs = layer.getLatLngs()[0].map(latlng => L.latLng(latlng.lat, latlng.lng));
-                map.on('mousemove', onMouseMove); // Track mouse movement
-                map.on('mouseup', onMouseUp); // End dragging when mouse is released
+                startLatLng = e.latlng;
+                var latLngs = layer.getLatLngs();
+                var flatLatLngs = L.LineUtil.isFlat(latLngs) ? latLngs : (Array.isArray(latLngs[0]) ? latLngs[0] : latLngs);
+                startLatLngs = flatLatLngs.map(latlng => L.latLng(latlng.lat, latlng.lng));
+                map.on('mousemove', onMouseMove);
+                map.on('mouseup', onMouseUp);
             });
-            // Mouse move event to drag the polygon
+
             function onMouseMove(e) {
-                if (isDragging) {
-                    var dx = e.latlng.lng - startLatLng.lng; // Calculate change in longitude
-                    var dy = e.latlng.lat - startLatLng.lat; // Calculate change in latitude
-                    // Create new LatLngs by applying the change to each point
-                    let newLatLngs = startLatLngs.map(latlng => L.latLng(latlng.lat + dy, latlng.lng + dx));
-                    // Update the polygon's LatLngs
+                if (isDragging && startLatLng) {
+                    var dx = e.latlng.lng - startLatLng.lng;
+                    var dy = e.latlng.lat - startLatLng.lat;
+                    var newLatLngs = startLatLngs.map(latlng => L.latLng(latlng.lat + dy, latlng.lng + dx));
                     layer.setLatLngs([newLatLngs]);
                     updateCoordinatesInput(layer);
                 }
             }
-            // Mouse up event to stop dragging
+
             function onMouseUp() {
                 isDragging = false;
-                map.off('mousemove', onMouseMove); // Stop mousemove tracking
-                map.off('mouseup', onMouseUp); // Stop mouseup tracking
+                map.off('mousemove', onMouseMove);
+                map.off('mouseup', onMouseUp);
             }
         }
         function updateCoordinatesInput(layer) {
-            const coordinates = layer.getLatLngs()[0].map(coord => ({
+            var latLngs = layer.getLatLngs();
+            var flatLatLngs = L.LineUtil.isFlat(latLngs) ? latLngs : (Array.isArray(latLngs[0]) ? latLngs[0] : latLngs);
+            const coordinates = flatLatLngs.map(coord => ({
                 lat: parseFloat(coord.lat.toFixed(6)), 
-                lon: parseFloat(coord.lng.toFixed(6))
+                lng: parseFloat(coord.lng.toFixed(6))
             }));
             document.getElementById('coordinates').value = JSON.stringify(coordinates);
         }
@@ -505,9 +500,7 @@
                         selectedPolygon = layer;
                         layer.setStyle({ color: 'red' });
                     }
-                    // Optionally, log the coordinates of the drawn polygon to the console
-                    const  coordinates = layer.getLatLngs();  // Get the polygon's coordinates
-                    document.getElementById('coordinates').value = JSON.stringify(coordinates);
+                    updateCoordinatesInput(layer);
                 });
             });
         }
@@ -650,11 +643,16 @@
             }
         }
         function initMap() {
-            // Two paths reach this: the layout's mapsLoaded event and the delayed
-            // call in the ready handler. Leaflet throws "Map container is already
-            // initialized" on the second one, so only the first run counts.
+            // Guard against multiple initializations
             if (window.__zoneMapReady) return;
+            if (mapType != "OSM" && (typeof google === 'undefined' || typeof google.maps === 'undefined')) {
+                return;
+            }
+            if (mapType == "OSM" && typeof L === 'undefined') {
+                return;
+            }
             window.__zoneMapReady = true;
+
             if (mapType == "OSM"){
                 $(".mapType").hide();
                 searchBox();
@@ -664,135 +662,95 @@
                     maxZoom: 19,  // Set maximum zoom level
                     attribution: '© OpenStreetMap'
                 }).addTo(map);
+
                 // Create a feature group to store drawn items (polygons, lines, etc.)
                 drawnItems = new L.FeatureGroup();
                 map.addLayer(drawnItems);
-                const AREA = document.getElementById('area').value;
-                const values = AREA.split(',');
-                const latLonArray = [];
-                for (let i = 0; i < values.length; i += 2) {
-                    const lat = parseFloat(values[i + 1]); // Latitude is the second value in the pair
-                    const lon = parseFloat(values[i]);    // Longitude is the first value in the pair
-                     // Validate coordinates before adding them
-                    if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
-                        latLonArray.push([lat, lon]);
-                    } else {
-                        console.error("Invalid coordinate pair:", lat, lon); // Log the invalid pair
-                    }
-                }
-                const cooo = latLonArray.map(coord => ({
+
+                // Create a polygon and add it to the map
+                if (latLonArray.length > 0) {
+                    var coordsForInput = latLonArray.map(coord => ({
                         lat: coord[0],
-                        lon: coord[1]
+                        lng: coord[1]
                     }));
-                    if(mapType == "OSM"){
-                        var coordinatesString = JSON.stringify(cooo);
-                        // Check if the string starts with '[[' and remove the first '[' if true
-                        if (coordinatesString.startsWith('[[')) {
-                            coordinatesString = coordinatesString.slice(1);  // Remove the first '['
+                    document.getElementById('coordinates').value = JSON.stringify(coordsForInput);
+
+                    var polygon = L.polygon(latLonArray, { color: 'blue' }).addTo(drawnItems);
+                    polygon.on('click', function () {
+                        if (selectedPolygon) {
+                            selectedPolygon.setStyle({ color: 'blue', weight: 3 });
                         }
-                        if (coordinatesString.endsWith(']]')) {
-                            coordinatesString = coordinatesString.slice(0, -1);  // Remove the last ']'
-                        }
-                        // Set the cleaned string as the value of the input field
-                        document.getElementById('coordinates').value = coordinatesString; 
+                        polygon.setStyle({ color: 'red', weight: 3 });
+                        selectedPolygon = polygon;
+                    });
+                    map.fitBounds(polygon.getBounds());
+                    makePolygonDraggable(polygon);
+                }
+
+                map.addControl(new L.Control.Draw({
+                    draw: {  // Disable drawing functionality
+                        polygon: true,  // Enable drawing of polygons
+                        rectangle: false, // Disable rectangle drawing
+                        circle: false,    // Disable circle drawing
+                        marker: false,    // Disable marker drawing
+                        polyline: false,  // Disable polyline drawing
+                        circlemarker: false,
+                    },
+                    edit: {
+                        featureGroup: drawnItems,  // Allow editing of drawn items
+                        remove: false  // Allow removal of items
                     }
-                    else
-                    {
-                        document.getElementById('coordinates').value = JSON.stringify(cooo);
-                    }
-                    // Create a polygon and add it to the map
-                    if (latLonArray.length > 0) {
-                        var polygon = L.polygon(latLonArray, { color: 'blue' }).addTo(drawnItems);
-                        polygon.on('click', function () {
-                            if (selectedPolygon) {
-                                selectedPolygon.setStyle({ color: 'blue', weight: 3 });
-                            }
-                            polygon.setStyle({ color: 'red', weight: 3 });
-                            selectedPolygon = polygon;
-                        });
-                        map.fitBounds(polygon.getBounds());
-                    }
-                    map.addControl(new L.Control.Draw({
-                        draw: {  // Disable drawing functionality
-                            polygon: true,  // Enable drawing of polygons
-                            rectangle: false, // Disable rectangle drawing
-                            circle: false,    // Disable circle drawing
-                            marker: false,    // Disable marker drawing
-                            polyline: false,  // Disable polyline drawing
-                            circlemarker: false,
-                        },
-                        edit: {
-                            featureGroup: drawnItems,  // Allow editing of drawn items
-                            remove: false  // Allow removal of items
-                        }
-                    }));
-                    map.on('draw:edited', function(event) {
-                        event.layers.eachLayer(function(layer) {
-                            if (layer instanceof L.Polygon  || layer instanceof L.MultiPolygon) {
-                                makePolygonDraggable(layer);
-                                // Get the coordinates of the polygon (all vertices)
-                                let latLngs = layer.getLatLngs();
-                                // Flatten the array of coordinates in case of multi-polygon
-                                let flatLatLngs = L.LineUtil.isFlat(latLngs) ? latLngs : latLngs.flat(Infinity);
-                                // Convert to desired format (lat, lon)
-                                let convertedArray = flatLatLngs.map(function(latLng) {
-                                    if (latLng && typeof latLng.lat === 'number' && typeof latLng.lng === 'number') {
-                                        if (latLng.lat >= -90 && latLng.lat <= 90 && latLng.lng >= -180 && latLng.lng <= 180) {
-                                            return { lat: latLng.lat, lon: latLng.lng };
-                                        }
-                                        else
-                                        {
-                                            console.error("Invalid latLng:", latLng); // Log invalid latLng for debugging
-                                            return null; // Avoid undefined latLngs
-                                        }
-                                    } else {
-                                        console.error("Invalid latLng:", latLng); // Log invalid latLng for debugging
-                                        return null; // Avoid undefined latLngs
-                                    }
-                                }).filter(item => item !== null); 
-                                // Final array to be saved as JSON
-                                let finalArray = convertedArray;
-                                layer.setLatLngs(finalArray); 
-                                document.getElementById('coordinates').value = JSON.stringify(finalArray);
-                            }
-                        });
-                    }); 
-                    map.on('draw:resize', function (event) {
-                        var layer = event.layer;
+                }));
+
+                map.on('draw:edited', function(event) {
+                    event.layers.eachLayer(function(layer) {
                         if (layer instanceof L.Polygon || layer instanceof L.MultiPolygon) {
+                            makePolygonDraggable(layer);
                             let latLngs = layer.getLatLngs();
                             let flatLatLngs = L.LineUtil.isFlat(latLngs) ? latLngs : latLngs.flat(Infinity);
+
                             let convertedArray = flatLatLngs.map(function(latLng) {
-                                if (latLng instanceof L.LatLng) {
-                                    latLng = latLng.wrap(); // Ensure it's a wrapped LatLng object
-                                }
                                 if (latLng && typeof latLng.lat === 'number' && typeof latLng.lng === 'number') {
-                                        if (latLng.lat >= -90 && latLng.lat <= 90 && latLng.lng >= -180 && latLng.lng <= 180) {
-                                            return { lat: latLng.lat, lon: latLng.lng };
-                                        }
-                                        else
-                                        {
-                                            console.error("Invalid latLng:", latLng); // Log invalid latLng for debugging
-                                            return null; // Avoid undefined latLngs
-                                        }
-                                } else {
-                                    console.error("Invalid latLng:", latLng); // Log invalid latLng for debugging
-                                    return null; // Avoid undefined latLngs
+                                    if (latLng.lat >= -90 && latLng.lat <= 90 && latLng.lng >= -180 && latLng.lng <= 180) {
+                                        return { lat: latLng.lat, lng: latLng.lng };
+                                    }
                                 }
-                                }).filter(item => item !== null); 
-                                // Final array to be saved as JSON
-                                let finalArray = convertedArray;
-                                layer.setLatLngs(finalArray); 
-                                document.getElementById('coordinates').value = JSON.stringify(finalArray);            
+                                return null;
+                            }).filter(item => item !== null);
+
+                            document.getElementById('coordinates').value = JSON.stringify(convertedArray);
                         }
                     });
-                    enablePolygonDrawing(map);  
+                });
+
+                map.on('draw:resize', function (event) {
+                    var layer = event.layer;
+                    if (layer instanceof L.Polygon || layer instanceof L.MultiPolygon) {
+                        let latLngs = layer.getLatLngs();
+                        let flatLatLngs = L.LineUtil.isFlat(latLngs) ? latLngs : latLngs.flat(Infinity);
+                        let convertedArray = flatLatLngs.map(function(latLng) {
+                            if (latLng instanceof L.LatLng) {
+                                latLng = latLng.wrap();
+                            }
+                            if (latLng && typeof latLng.lat === 'number' && typeof latLng.lng === 'number') {
+                                if (latLng.lat >= -90 && latLng.lat <= 90 && latLng.lng >= -180 && latLng.lng <= 180) {
+                                    return { lat: latLng.lat, lng: latLng.lng };
+                                }
+                            }
+                            return null;
+                        }).filter(item => item !== null);
+
+                        document.getElementById('coordinates').value = JSON.stringify(convertedArray);
+                    }
+                });
+
+                enablePolygonDrawing(map);
             }
             else
             {
                 var infowindow = new google.maps.InfoWindow({
                     size: new google.maps.Size(150, 50)
-                })
+                });
                 $(".mapType").show();
                 map = new google.maps.Map(document.getElementById('map'), {
                     zoom: 12,
@@ -813,71 +771,61 @@
                     streetViewControl: false,
                     fullscreenControl: false
                 });
+
                 var zones = [];
-                var zones_area = [];
-                for (i = 0; i < geopoints.length; i++) {
-                    zones_area.push({ lat: parseFloat(geopoints[i].lat), lng: parseFloat(geopoints[i].lng) });
+                if (zones_area.length > 0) {
+                    zones.push(zones_area);
                 }
-                zones.push(zones_area);
-                var i;
-                var polygon;
-                for (i = 0; i < zones.length; i++) {                 
-                    polygon = new google.maps.Polygon({
+
+                for (var i = 0; i < zones.length; i++) {
+                    var polygon = new google.maps.Polygon({
                         paths: zones[i],
                         strokeWeight: 1,
-                        strokeColor:'#007cf',
+                        strokeColor:'#007cff',
                         fillColor: '#007cff',
                         fillOpacity: 0.4,
-                        editable: true,   
-                        draggable: true  
+                        editable: true,
+                        draggable: true
                     });
                     polygon.type = google.maps.drawing.OverlayType.POLYGON;
                     polygon.setMap(map);
                     addNewPolys(polygon);
                     allShapes.push(polygon);
-                        google.maps.event.addListener(polygon, 'click', function(e) { getCoordinates(polygon); });
-                        google.maps.event.addListener(polygon, "dragend", function(e) {
-                        for (i=0; i < allShapes.length; i++) {
-                            if (polygon.getPath() == allShapes[i].getPath()) {
-                                allShapes.splice(i, 1);
+
+                    google.maps.event.addListener(polygon, 'click', function(e) { getCoordinates(polygon); });
+                    google.maps.event.addListener(polygon, "dragend", function(e) {
+                        for (var j = 0; j < allShapes.length; j++) {
+                            if (polygon.getPath() == allShapes[j].getPath()) {
+                                allShapes.splice(j, 1);
                             }
                         }
                         allShapes.push(polygon);
-                        let lat_lng = [];
-                        allShapes.forEach(function(data, index) {
-                            lat_lng[index] = getCoordinates(data);
-                        });
-                        document.getElementById('coordinates').value = JSON.stringify(lat_lng);
+                        updatePolygonCoordinates();
                     });
                     google.maps.event.addListener(polygon.getPath(), "insert_at", function(e) {
-                        for (i=0; i < allShapes.length; i++) {   // Clear out the old allShapes entry
-                            if (polygon.getPath() == allShapes[i].getPath()) {
-                                allShapes.splice(i, 1);
+                        for (var j = 0; j < allShapes.length; j++) {
+                            if (polygon.getPath() == allShapes[j].getPath()) {
+                                allShapes.splice(j, 1);
                             }
                         }
                         allShapes.push(polygon);
-                        let lat_lng = [];
-                        allShapes.forEach(function(data, index) {
-                            lat_lng[index] = getCoordinates(data);
-                        });
-                        document.getElementById('coordinates').value = JSON.stringify(lat_lng);
+                        updatePolygonCoordinates();
                     });
                     google.maps.event.addListener(polygon.getPath(), "remove_at", function(e) { getCoordinates(polygon); });
                     google.maps.event.addListener(polygon.getPath(), "set_at", function(e) { getCoordinates(polygon); });
                 }
-                let lat_lng = [];
-                allShapes.forEach(function(data, index) {
-                    lat_lng[index] = getCoordinates(data);
-                });
-                document.getElementById('coordinates').value = JSON.stringify(lat_lng);
+
+                if (zones_area.length > 0) {
+                    var bounds = new google.maps.LatLngBounds();
+                    for (var b = 0; b < zones_area.length; b++) {
+                        bounds.extend(zones_area[b]);
+                    }
+                    map.fitBounds(bounds);
+                }
+
+                updatePolygonCoordinates();
                 searchBox();
-                var shapeOptions = {
-                    strokeWeight: 1,
-                    fillOpacity: 0.4,
-                    editable: true,
-                    draggable: true
-                };
-               
+
                 var shapeOptions = {
                     strokeWeight: 1,
                     fillOpacity: 0.4,
@@ -893,7 +841,7 @@
                 drawingManager.setMap(map);
                 google.maps.event.addListener(drawingManager, 'overlaycomplete', function (e) {
                     if (e.type !== google.maps.drawing.OverlayType.POLYGON) return;
-                  
+
                     allShapes.forEach(p => p.setMap(null));
                     allShapes = [];
 
@@ -905,7 +853,8 @@
                     newShape.setOptions({ fillColor: shapeColor });
 
                     drawingManager.setDrawingMode(null);
-                    setSelection(newShape, 0);                   
+                    setSelection(newShape, 0);
+
                     google.maps.event.addListener(newShape, "dragend", function () {
                         updatePolygonCoordinates();
                     });
@@ -921,12 +870,11 @@
                     google.maps.event.addListener(newShape.getPath(), "set_at", function () {
                         updatePolygonCoordinates();
                     });
-                });               
-
+                });
 
                 google.maps.event.addListener(drawingManager, 'drawingmode_changed', clearSelection);
-                google.maps.event.addListener(map, 'click', clearSelection); 
-            }  
+                google.maps.event.addListener(map, 'click', clearSelection);
+            }
         }
         function updatePolygonCoordinates() {
             let lat_lng = [];

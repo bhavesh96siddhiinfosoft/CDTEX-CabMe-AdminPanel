@@ -33,6 +33,8 @@ class Settings extends Authenticatable
         'serviceJsonData',
         'website_color',
         'web_panel_url',
+        'web_app_store_link',
+        'web_play_store_link',
         'web_footer_description',
         'web_map_iframe',
         'web_header_logo',
@@ -48,4 +50,19 @@ class Settings extends Authenticatable
         'web_social' => 'array',
         'web_cookie_consent' => 'array',
     ];
+
+    protected $appends = [
+        'app_store_link',
+        'play_store_link',
+    ];
+
+    public function getAppStoreLinkAttribute()
+    {
+        return $this->web_app_store_link;
+    }
+
+    public function getPlayStoreLinkAttribute()
+    {
+        return $this->web_play_store_link;
+    }
 }

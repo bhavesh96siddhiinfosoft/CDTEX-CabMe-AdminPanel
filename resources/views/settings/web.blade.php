@@ -52,6 +52,20 @@
                                 </div>
                             </div>
                             <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="ec-form-label" for="web_app_store_link">{{ trans('lang.app_store_link') }}</label>
+                                    <input type="url" class="form-control" name="web_app_store_link" id="web_app_store_link"
+                                           value="{{ $settings->web_app_store_link }}" placeholder="https://apps.apple.com/...">
+                                    <div class="ec-form-help">{{ trans('lang.app_store_link_help') }}</div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="ec-form-label" for="web_play_store_link">{{ trans('lang.play_store_link') }}</label>
+                                    <input type="url" class="form-control" name="web_play_store_link" id="web_play_store_link"
+                                           value="{{ $settings->web_play_store_link }}" placeholder="https://play.google.com/store/apps/...">
+                                    <div class="ec-form-help">{{ trans('lang.play_store_link_help') }}</div>
+                                </div>
+                            </div>
+                            <div class="row">
                                 <div class="col-md-12 mb-3">
                                     <label class="ec-form-label" for="web_footer_description">{{ trans('lang.footer_description') }}</label>
                                     <textarea class="form-control" name="web_footer_description" id="web_footer_description" rows="3"
